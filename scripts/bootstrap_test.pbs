@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N bootstrap_test
+#PBS -l select=1:ncpus=4:mem=16GB
+#PBS -l walltime=00:20:00
+#PBS -o logs/bootstrap_test_output.txt
+#PBS -e logs/bootstrap_test_error.txt
+
+cd $PBS_O_WORKDIR
+
+module add 2026.1
+module add r/python/gcc/14.3.0/3.13.8/4.5.2
+module add r-ordinalnet/python/none/none/2.14
+module add r-doparallel/python/none/none/3.13.8/1.0.17
+module add r-foreach/python/none/none/3.13.8/1.5.2
+
+Rscript scripts/03_bootstrap_test.R

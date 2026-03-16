@@ -1,4 +1,8 @@
 .Rhistory
-.Rproj.user/
 .RData
-results/
+.Rproj.user
+logs/
+results/bootstrap_coefficients.csv
+results/bootstrap_test.csv
+results/final_model.rds
+results/x_train.rds

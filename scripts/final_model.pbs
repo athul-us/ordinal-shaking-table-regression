@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N final_model
+#PBS -l select=1:ncpus=1:mem=32GB
+#PBS -l walltime=00:45:00
+#PBS -o logs/final_output.txt
+#PBS -e logs/final_error.txt
+
+cd $PBS_O_WORKDIR
+
+module add 2026.1
+module add r/python/gcc/14.3.0/3.13.8/4.5.2
+module add r-ordinalnet/python/none/none/2.14
+
+Rscript scripts/02_final_model.R

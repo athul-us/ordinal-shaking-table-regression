@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N prepare_data
+#PBS -l select=1:ncpus=1:mem=16GB
+#PBS -l walltime=00:30:00
+#PBS -o logs/prepare_output.txt
+#PBS -e logs/prepare_error.txt
+
+cd $PBS_O_WORKDIR
+
+module add 2026.1
+module add r/python/gcc/14.3.0/3.13.8/4.5.2
+module add r-dplyr/python/gcc/14.3.0/3.13.8/1.1.4
+module add r-readr/python/gcc/14.3.0/3.13.8/2.1.5
+module add r-janitor/python/none/none/3.13.8/2.2.0
+
+Rscript scripts/00_prepare_data.R

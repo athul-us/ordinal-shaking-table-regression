@@ -1,114 +1,92 @@
-# ================================
-# 1. LIBRARIES
-# ================================
-
-library(dplyr)
-library(readr)
-library(janitor)
 library(ordinalNet)
+library(doParallel)
+library(foreach)
+
+message("===================================")
+message("ALPHA TUNING STARTED - FINAL")
+message("===================================")
 
 set.seed(42)
 
-# ================================
-# 2. DATA LOADING FUNCTION
-# ================================
+# Load prepared data
+x_train <- readRDS("results/x_train.rds")
+y_train <- readRDS("results/y_train.rds")
 
-process_stream <- function(comp_path, shape_path) {
-  
-  comp <- read_csv(comp_path, show_col_types = FALSE) %>% clean_names()
-  shape <- read_csv(shape_path, show_col_types = FALSE) %>% clean_names()
-  
-  comp_clean <- comp %>%
-    group_by(particle_id) %>%
-    summarise(
-      particle_area   = first(particle_area),
-      particle_weight = first(particle_weight),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      particle_density = ifelse(particle_area == 0,
-                                NA,
-                                particle_weight / particle_area)
-    )
-  
-  shape %>%
-    left_join(comp_clean, by = "particle_id")
+# Ensure response is ordered factor
+if(!is.factor(y_train)){
+  y_train <- factor(y_train, ordered = TRUE)
 }
 
-# ================================
-# 3. LOAD TRAINING STREAMS
-# ================================
+message(paste("Rows:", nrow(x_train)))
+message(paste("Columns:", ncol(x_train)))
 
-train_data <- bind_rows(
-  process_stream("data/S15_Particle_Composition.csv",
-                 "data/S15_Particle_Shape_Factors.csv") %>%
-    mutate(d_class = factor("very_high",
-                            levels = c("low","medium","high","very_high"),
-                            ordered = TRUE)),
-  
-  process_stream("data/S16_Particle_Composition.csv",
-                 "data/S16_Particle_Shape_Factors.csv") %>%
-    mutate(d_class = factor("medium",
-                            levels = c("low","medium","high","very_high"),
-                            ordered = TRUE)),
-  
-  process_stream("data/S17_Particle_Composition.csv",
-                 "data/S17_Particle_Shape_Factors.csv") %>%
-    mutate(d_class = factor("low",
-                            levels = c("low","medium","high","very_high"),
-                            ordered = TRUE)),
-  
-  process_stream("data/S19_Particle_Composition.csv",
-                 "data/S19_Particle_Shape_Factors.csv") %>%
-    mutate(d_class = factor("high",
-                            levels = c("low","medium","high","very_high"),
-                            ordered = TRUE))
-)
+# Safety checks
+if(any(is.na(x_train))) stop("ERROR: NA values found in predictors.")
+if(any(is.na(y_train))) stop("ERROR: NA values found in response.")
 
-# ================================
-# 4. PREPARE MATRICES
-# ================================
+# Detect constant columns
+zero_var <- which(apply(x_train,2,var)==0)
+if(length(zero_var) > 0){
+  stop(paste("ERROR: Constant predictors detected:", paste(zero_var, collapse=", ")))
+}
 
-numeric_cols <- train_data %>%
-  select(where(is.numeric)) %>%
-  select(-particle_id) %>%
-  colnames()
+# Alpha grid
+alpha_grid <- seq(0,1,by=0.1)
+message(paste("Total alpha values:", length(alpha_grid)))
 
-x_train <- scale(as.matrix(train_data[numeric_cols]))
-y_train <- train_data$d_class
+# Start cluster
+n_workers <- 11
+cl <- makeCluster(n_workers)
+registerDoParallel(cl)
 
-# ================================
-# 5. ALPHA TUNING
-# ================================
+clusterEvalQ(cl, library(ordinalNet))
 
-message("Starting Alpha Tuning...")
+clusterExport(cl,
+              varlist=c("x_train","y_train"),
+              envir=environment())
 
-alpha_grid <- seq(0, 1, by = 0.1)
-cv_errors <- numeric(length(alpha_grid))
+results <- foreach(a = alpha_grid,
+                   .combine = rbind,
+                   .packages = "ordinalNet") %dopar% {
 
-for (i in seq_along(alpha_grid)) {
-  
+  message(paste("Running alpha:", a))
+
   cv_fit <- ordinalNetCV(
     x = x_train,
     y = y_train,
-    alpha = alpha_grid[i],
+    alpha = a,
     nFolds = 5,
     family = "cumulative",
     link = "logit"
   )
-  
-  cv_errors[i] <- min(cv_fit$misclassification)
+
+  data.frame(
+    alpha = a,
+    cv_error = min(cv_fit$misclassification),
+    loglik = max(cv_fit$loglik)
+  )
 }
 
-best_alpha <- alpha_grid[which.min(cv_errors)]
+stopCluster(cl)
 
-message(paste("Best Alpha:", best_alpha))
+# Identify best alpha using log-likelihood
+best_alpha <- results$alpha[
+  which.max(results$loglik)
+]
+
+message("-----------------------------------")
+message(paste("BEST ALPHA:", best_alpha))
+message("-----------------------------------")
 
 # Save results
-write.csv(
-  data.frame(alpha = alpha_grid, cv_error = cv_errors),
-  "results/alpha_curve.csv",
-  row.names = FALSE
-)
+write.csv(results,
+          "results/alpha_curve.csv",
+          row.names = FALSE)
 
-saveRDS(best_alpha, "results/best_alpha.rds")
+saveRDS(best_alpha,
+        "results/best_alpha.rds")
+
+message("===================================")
+message("ALPHA TUNING COMPLETED")
+message("===================================")
+

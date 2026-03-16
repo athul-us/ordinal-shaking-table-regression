@@ -1,0 +1,16 @@
+#!/bin/bash
+#PBS -N bootstrap
+#PBS -l select=1:ncpus=16:mem=64GB
+#PBS -l walltime=08:00:00
+#PBS -o logs/bootstrap_output.txt
+#PBS -e logs/bootstrap_error.txt
+
+cd $PBS_O_WORKDIR
+
+module add 2026.1
+module add r/python/gcc/14.3.0/3.13.8/4.5.2
+module add r-ordinalnet/python/none/none/2.14
+module add r-doparallel/python/none/none/3.13.8/1.0.17
+module add r-foreach/python/none/none/3.13.8/1.5.2
+
+Rscript scripts/03_bootstrap.R
